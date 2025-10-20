@@ -312,8 +312,33 @@ class Face(HalfedgeElement):
         Catatan:
             - Jika panjang normal hampir nol, gunakan default (0,0,1).
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi normal()")
+        verts = self.vertices()
+        
+        # Jika jumlah vertex < 3, return default normal
+        if len(verts) < 3:
+            return np.array([0.0, 0.0, 1.0])
+
+        # Inisialisasi
+        normal_vec = np.array([0.0, 0.0, 0.0])
+        num_verts = len(verts)
+
+        # Newell's method
+        for i in range(num_verts):
+            v_i = verts[i].position
+            v_i_plus_1 = verts[(i + 1) % num_verts].position
+            
+            normal_vec[0] += (v_i[1] - v_i_plus_1[1]) * (v_i[2] + v_i_plus_1[2])
+            normal_vec[1] += (v_i[2] - v_i_plus_1[2]) * (v_i[0] + v_i_plus_1[0])
+            normal_vec[2] += (v_i[0] - v_i_plus_1[0]) * (v_i[1] + v_i_plus_1[1])
+
+        # Normalisasi 
+        magnitude = np.linalg.norm(normal_vec)
+        
+        # Handle panjang normal hampir nol
+        if magnitude < 1e-9:
+            return np.array([0.0, 0.0, 1.0])
+            
+        return normal_vec / magnitude
 
     def area(self) -> float:
         """
