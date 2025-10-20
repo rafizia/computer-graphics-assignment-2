@@ -151,8 +151,33 @@ class Vertex(HalfedgeElement):
             - Jika vertex tidak punya halfedge, return list kosong.
             - Hati-hati jangan masukkan boundary face.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi faces()")
+        if not self.halfedge:
+            return []
+            
+        faces_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            # Ambil face dari halfedge saat ini
+            if current_halfedge and current_halfedge.face:
+                # Skip boundary faces
+                if not current_halfedge.face.is_boundary:
+                    faces_list.append(current_halfedge.face)
+
+            # Pindah ke halfedge.twin.next
+            if not current_halfedge.twin:
+                break 
+            current_halfedge = current_halfedge.twin.next
+
+            # Berhenti jika sudah kembali ke awal
+            if current_halfedge == start_halfedge:
+                break
+            
+            if current_halfedge is None:
+                break
+
+        return faces_list
 
 
 class Edge(HalfedgeElement):
