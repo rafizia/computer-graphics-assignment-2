@@ -619,5 +619,36 @@ class HalfedgeMesh:
         Return:
             float: volume mesh (selalu non-negatif).
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi volume()")
+        total_volume = 0.0
+
+        # Iterasi semua face
+        for f in self.faces:
+            # Abaikan face yang boundary atau deleted
+            if f.deleted or f.is_boundary:
+                continue
+
+            # Ambil vertices
+            verts = f.vertices()
+
+            # Jika face punya < 3 vertex
+            if len(verts) < 3:
+                continue
+            
+            # Ambil vertex[0] sebagai pivot
+            p0 = verts[0].position
+            
+            # Lakukan triangulasi fan
+            for i in range(1, len(verts) - 1):
+                p1 = verts[i].position
+                p2 = verts[i+1].position
+                
+                # Hitung kontribusi volume
+                cross_product = np.cross(p1, p2)
+                dot_product = np.dot(p0, cross_product)
+                tetra_volume = dot_product / 6.0
+                
+                # Jumlahkan semua kontribusi
+                total_volume += tetra_volume
+                
+        # Ambil nilai absolut dari volume
+        return abs(total_volume)
