@@ -356,8 +356,36 @@ class Face(HalfedgeElement):
         Return:
             float: luas area face.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi area()")
+        verts = self.vertices()
+        
+        # Jika jumlah vertex < 3, return 0.0
+        if len(verts) < 3:
+            return 0.0
+
+        # Pilih vertex pertama sebagai pusat (v0)
+        v0 = verts[0].position
+        total_area = 0.0
+        num_verts = len(verts)
+
+        # Iterasi untuk membentuk segitiga (v0, v_i, v_{i+1})
+        for i in range(1, num_verts - 1):
+            v_i = verts[i].position
+            v_i_plus_1 = verts[i + 1].position
+            
+            # Buat dua vektor dari pusat v0
+            vec_a = v_i - v0
+            vec_b = v_i_plus_1 - v0
+            
+            # Hitung cross product
+            cross_product = np.cross(vec_a, vec_b)
+            
+            # Luas segitiga
+            triangle_area = 0.5 * np.linalg.norm(cross_product)
+            
+            # Jumlahkan semua luas segitiga
+            total_area += triangle_area
+            
+        return total_area
 
     def is_triangle(self) -> bool:
         """Check apakah face adalah triangle"""
