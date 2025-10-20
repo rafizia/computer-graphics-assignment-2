@@ -125,8 +125,33 @@ class Vertex(HalfedgeElement):
             - Traversal bisa dilakukan dengan h = h.twin.next.
             - Berhenti jika kembali ke halfedge awal.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi normal()")
+        # Dapatkan semua face adjacent
+        adjacent_faces = self.faces()
+
+        # Jika vertex tidak punya face valid
+        if not adjacent_faces:
+            return np.array([0.0, 1.0, 0.0])
+
+        # Akumulator
+        weighted_normal_sum = np.array([0.0, 0.0, 0.0])
+
+        # Iterasi setiap face
+        for face in adjacent_faces:         
+            # Hitung normal
+            face_normal = face.normal()
+            # Hitung luas
+            face_area = face.area()
+            # Tambahkan (normal_face * area_face) ke accumulator
+            weighted_normal_sum += face_normal * face_area
+
+        # Normalisasi
+        magnitude = np.linalg.norm(weighted_normal_sum)
+        
+        # Handle jika panjangnya nol
+        if magnitude < 1e-9:
+            return np.array([0.0, 1.0, 0.0])
+            
+        return weighted_normal_sum / magnitude
 
 
     def faces(self) -> List['Face']:
