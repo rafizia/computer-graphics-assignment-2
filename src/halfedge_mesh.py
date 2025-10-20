@@ -216,8 +216,27 @@ class Face(HalfedgeElement):
             - Jika face tidak punya halfedge (kosong), return list kosong.
             - Urutan edge mengikuti urutan traversal halfedge.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi edges()")
+        if not self.halfedge:
+            return []
+
+        edges_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            if current_halfedge and current_halfedge.edge:
+                edges_list.append(current_halfedge.edge)
+            else:
+                break
+            
+            # Bergerak ke halfedge berikutnya di dalam face
+            current_halfedge = current_halfedge.next
+            
+            # Berhenti jika sudah kembali ke awal
+            if current_halfedge == start_halfedge:
+                break
+                
+        return edges_list
 
     def normal(self) -> np.ndarray:
         """
