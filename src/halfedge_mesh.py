@@ -588,8 +588,18 @@ class HalfedgeMesh:
         Return:
             float: luas permukaan total.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi surface_area()")
+        total_area = 0.0
+        
+        # Iterasi semua face
+        for f in self.faces:
+            # Abaikan face yang boundary atau deleted
+            if f.deleted or f.is_boundary:
+                continue
+                
+            # Panggil f.area()
+            total_area += f.area()
+            
+        return total_area
 
     def volume(self) -> float:
         """
