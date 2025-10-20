@@ -511,8 +511,69 @@ class HalfedgeMesh:
         Return:
             dict: dictionary dengan semua statistik mesh.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi statistics()")
+        vert_count = 0
+        edge_count = 0
+        face_count = 0
+        halfedge_count = 0
+        tri_count = 0
+        quad_count = 0
+        other_face_count = 0
+        boundary_edge_count = 0
+
+        # Hitung Vertices
+        for v in self.vertices:
+            if not v.deleted:
+                vert_count += 1
+        
+        # Hitung Halfedges
+        for h in self.halfedges:
+            if not h.deleted:
+                halfedge_count += 1
+        
+        # Hitung Edges dan Boundary Edges
+        for e in self.edges:
+            if not e.deleted:
+                edge_count += 1
+                
+                # Cek apakah boundary edge
+                h = e.halfedge
+                if h and h.twin:
+                    is_h1_boundary = not h.face or h.face.is_boundary
+                    is_h2_boundary = not h.twin.face or h.twin.face.is_boundary
+                    
+                    # Edge adalah boundary jika tepat satu dari halfedge-nya adalah boundary.
+                    if is_h1_boundary != is_h2_boundary:
+                        boundary_edge_count += 1
+                elif h:
+                     # Jika tidak punya twin, pasti boundary
+                     boundary_edge_count += 1
+
+        # Hitung Faces dan klasifikasinya
+        for f in self.faces:
+            # Lewati face yang deleted atau merupakan virtual boundary face
+            if not f.deleted and not f.is_boundary:
+                face_count += 1
+                num_verts = len(f.vertices()) 
+                
+                if num_verts == 3:
+                    tri_count += 1
+                elif num_verts == 4:
+                    quad_count += 1
+                elif num_verts > 4:
+                    other_face_count += 1
+
+        stats = {
+            "vertices": vert_count,
+            "edges": edge_count,
+            "faces": face_count,
+            "halfedges": halfedge_count,
+            "triangles": tri_count,
+            "quads": quad_count,
+            "other_faces": other_face_count,
+            "boundary_edges": boundary_edge_count
+        }
+        
+        return stats
 
     def surface_area(self) -> float:
         """
