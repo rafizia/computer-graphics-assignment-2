@@ -71,8 +71,33 @@ class Vertex(HalfedgeElement):
         Catatan:
             - Jika vertex tidak punya halfedge (isolated), return list kosong.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi neighbors()")
+        if not self.halfedge:
+            return []
+            
+        neighbors_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            # Simpan vertex ke dalam list
+            if current_halfedge and current_halfedge.vertex:
+                neighbors_list.append(current_halfedge.vertex)
+            else:
+                break
+
+            # Pindah ke halfedge.twin.next
+            if not current_halfedge.twin:
+                break 
+            current_halfedge = current_halfedge.twin.next
+
+            # Berhenti jika sudah kembali ke awal
+            if current_halfedge == start_halfedge:
+                break
+            
+            if current_halfedge is None:
+                break
+
+        return neighbors_list
 
 
     def normal(self) -> np.ndarray:
