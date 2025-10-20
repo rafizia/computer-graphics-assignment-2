@@ -177,8 +177,27 @@ class Face(HalfedgeElement):
             - Jika face tidak punya halfedge (kosong), return list kosong.
             - Urutan vertex mengikuti urutan traversal halfedge (loop tertutup).
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi vertices()")
+        if not self.halfedge:
+            return []
+
+        vertices_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            if current_halfedge and current_halfedge.vertex:
+                vertices_list.append(current_halfedge.vertex)
+            else:
+                break
+        
+            # Bergerak ke halfedge berikutnya di dalam face
+            current_halfedge = current_halfedge.next
+        
+            # Berhenti jika sudah kembali ke awal 
+            if current_halfedge == start_halfedge:
+                break
+
+        return vertices_list
 
     def edges(self) -> List['Edge']:
         """
