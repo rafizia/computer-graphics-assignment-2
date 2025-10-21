@@ -339,7 +339,7 @@ class MeshOperations:
             new_vertex = self.mesh.add_vertex(new_pos)
             edge_vertex_map[edge_key] = new_vertex
         
-        # Bangun 4 triangle baru untuk setiap face lama
+        # Build 4 triangle baru untuk setiap face lama
         new_faces = []
         for face_data in old_faces_data:
             verts = face_data['vertices']
