@@ -117,7 +117,88 @@ class MeshOperations:
             bool: True jika subdivision berhasil,
                 False jika tidak ada face valid.
         """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi subdivide_linear()")
+        # Mengumpulkan data posisi dari semua face yang valid
+        old_faces_data = []
+        for face in self.mesh.faces:
+            if face.deleted or face.is_boundary:
+                continue
+            
+            vertices = face.vertices()
+            if len(vertices) < 3:
+                continue
+                
+            face_data = {
+                'vertices': [v.position.copy() for v in vertices]
+            }
+            old_faces_data.append(face_data)
+        
+        # Jika tidak ada face valid
+        if len(old_faces_data) == 0:
+            return False
+        
+        # Siapkan struktur untuk sub-faces baru
+        new_faces = []
+        
+        # Mapping posisi ke vertex (buat menghindari duplikasi)
+        position_to_vertex = {}
+        
+        def get_or_create_vertex(position):
+            """Helper function untuk mendapatkan atau membuat vertex berdasarkan posisi"""
+            pos_tuple = tuple(position)
+            if pos_tuple not in position_to_vertex:
+                position_to_vertex[pos_tuple] = position
+            return position_to_vertex[pos_tuple]
+        
+        # Memproses setiap face lama untuk membuat sub-face baru
+        for face_data in old_faces_data:
+            vertices_pos = face_data['vertices']
+            n = len(vertices_pos)
+            
+            # Menghitung face center (centroid)
+            face_center = np.mean(vertices_pos, axis=0)
+            face_center_vertex = get_or_create_vertex(face_center)
+            
+            # Menghitung edge midpoints
+            edge_midpoints = []
+            for i in range(n):
+                v_curr = vertices_pos[i]
+                v_next = vertices_pos[(i + 1) % n]
+                midpoint = (v_curr + v_next) / 2.0
+                edge_midpoints.append(get_or_create_vertex(midpoint))
+            
+            # Untuk setiap vertex pada face, bentuk sub-face
+            # Pattern: [corner, edge_mid_next, face_center, edge_mid_prev]
+            for i in range(n):
+                corner = get_or_create_vertex(vertices_pos[i])
+                edge_mid_next = edge_midpoints[i]  # edge dari i ke i+1
+                edge_mid_prev = edge_midpoints[(i - 1) % n]  # edge dari i-1 ke i
+                
+                # Buat sub-face baru (quad untuk n-gon, atau triangle jika n=3)
+                sub_face = [corner, edge_mid_next, face_center_vertex, edge_mid_prev]
+                new_faces.append(sub_face)
+        
+        # Kosongkan mesh lama
+        self.mesh.vertices.clear()
+        self.mesh.edges.clear()
+        self.mesh.faces.clear()
+        self.mesh.halfedges.clear()
+        self.mesh.boundary_faces.clear()
+        
+        # Buat vertex baru dari position_to_vertex map
+        vertex_map = {}
+        for pos_tuple, position in position_to_vertex.items():
+            new_vertex = self.mesh.add_vertex(position)
+            vertex_map[pos_tuple] = new_vertex
+        
+        # Convert new_faces dari positions ke vertex objects
+        new_faces_vertices = []
+        for face_positions in new_faces:
+            face_vertices = [vertex_map[tuple(pos)] for pos in face_positions]
+            new_faces_vertices.append(face_vertices)
+
+        MeshLoader._build_halfedge_connectivity(self.mesh, new_faces_vertices)
+        
+        return True
 
     def subdivide_loop(self) -> bool:
         """
