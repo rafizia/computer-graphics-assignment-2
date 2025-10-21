@@ -7,8 +7,9 @@ Implementasi operasi-operasi mesh:
 """
 
 import numpy as np
-from typing import Optional
+from typing import List, Optional
 from halfedge_mesh import HalfedgeMesh, Vertex, Edge, Face
+from mesh_loader import MeshLoader 
 
 class MeshOperations:
     """Kelas untuk operasi-operasi mesh"""
@@ -48,7 +49,56 @@ class MeshOperations:
         Returns:
             int: jumlah face non-triangle yang sudah ditriangulasi.
         """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi triangulate()")
+        # Kumpulkan vertex yang valid
+        valid_vertices = [v for v in self.mesh.vertices if not v.deleted]
+        if not valid_vertices:
+            return 0
+
+        # List baru untuk face, berisi objek Vertex
+        new_faces_list_of_objects: List[List[Vertex]] = []
+        faces_triangulated_count = 0
+        
+        faces_to_process = self.mesh.faces.copy()
+
+        # Iterasi semua face
+        for f in faces_to_process:
+            if f.deleted or f.is_boundary:
+                continue
+
+            verts = f.vertices()
+            num_verts = len(verts)
+
+            if num_verts == 3:
+                # Jika sudah segitiga, tambahkan
+                new_faces_list_of_objects.append(verts)
+            
+            elif num_verts > 3:
+                # Jika n > 3, lakukan fan triangulation
+                faces_triangulated_count += 1
+                v0 = verts[0] # Pivot
+                
+                for i in range(1, num_verts - 1):
+                    new_tri = [v0, verts[i], verts[i+1]]
+                    new_faces_list_of_objects.append(new_tri)
+
+        if faces_triangulated_count == 0:
+            return 0
+ 
+        # Hapus data topologi lama
+        self.mesh.vertices.clear()
+        self.mesh.edges.clear()
+        self.mesh.faces.clear()
+        self.mesh.halfedges.clear()
+        self.mesh.boundary_faces.clear()
+        
+        # Tetapkan list vertex baru
+        self.mesh.vertices = valid_vertices
+
+        # Panggil builder
+        loader = MeshLoader()
+        loader._build_halfedge_connectivity(self.mesh, new_faces_list_of_objects)
+
+        return faces_triangulated_count
 
     def subdivide_linear(self) -> bool:
         """
@@ -123,7 +173,7 @@ class MeshOperations:
         bool: True jika subdivision berhasil,
               False jika mesh bukan triangular mesh.
     """
-    raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi subdivide_loop()")
+        pass
 
 
     def subdivide_catmull_clark(self) -> bool:
@@ -173,4 +223,4 @@ class MeshOperations:
             bool: True jika subdivision berhasil,
                 False jika mesh kosong.
         """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi subdivide_catmull_clark()")
+        pass
