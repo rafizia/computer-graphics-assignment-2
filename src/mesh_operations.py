@@ -9,6 +9,7 @@ Implementasi operasi-operasi mesh:
 import numpy as np
 from typing import Optional
 from halfedge_mesh import HalfedgeMesh, Vertex, Edge, Face
+from mesh_loader import MeshLoader
 
 class MeshOperations:
     """Kelas untuk operasi-operasi mesh"""
@@ -48,7 +49,40 @@ class MeshOperations:
         Returns:
             int: jumlah face non-triangle yang sudah ditriangulasi.
         """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi triangulate()")
+        faces_to_delete = [] # Face yg perlu ditriangulasi
+        new_triangles = [] # Triangles baru
+        triangulated_count = 0
+
+        for face in self.mesh.faces:
+            # Lewati face yang sudah triangle, boundary, atau dihapus
+            if face.deleted or face.is_boundary:
+                continue
+            
+            vertices = face.vertices()
+            n = len(vertices)
+            
+            # Jika face punya n > 3 vertex, lakukan fan triangulation
+            if n > 3:
+                v0 = vertices[0] # Pivot
+                
+                # Buat triangle-triangle baru: [v0, v[i], v[i+1]]
+                for i in range(1, n - 1):
+                    triangle = [v0, vertices[i], vertices[i + 1]]
+                    new_triangles.append(triangle)
+
+                faces_to_delete.append(face)
+                triangulated_count += 1
+        
+        # Jika tidak ada face yang perlu ditriangulasi
+        if triangulated_count == 0:
+            return 0
+        
+        for face in faces_to_delete:
+            face.mark_deleted()
+        
+        MeshLoader._build_halfedge_connectivity(self.mesh, new_triangles)
+        
+        return triangulated_count
 
     def subdivide_linear(self) -> bool:
         """
