@@ -132,8 +132,103 @@ class MeshOperations:
         Return:
             bool: True jika subdivision berhasil,
                 False jika tidak ada face valid.
-        """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi subdivide_linear()")
+        """      
+        # List untuk menyimpan vertex baru
+        new_vertices_list: List[Vertex] = []
+        # List untuk menyimpan face baru
+        new_face_list_of_objects: List[List[Vertex]] = []
+        
+        pos_to_vertex_map: dict[tuple, Vertex] = {}
+
+        def get_or_create_vertex(position):
+            pos_tuple = tuple(np.round(position, 6))
+            if pos_tuple in pos_to_vertex_map:
+                return pos_to_vertex_map[pos_tuple]
+            else:
+                new_v = Vertex(position) # Buat objek Vertex
+                new_vertices_list.append(new_v)
+                pos_to_vertex_map[pos_tuple] = new_v
+                return new_v
+
+        old_vert_new_obj_map = {}
+        edge_midpoint_obj_map = {}
+        face_centroid_obj_map = {}
+
+        # Buat ulang vertex lama
+        for v in self.mesh.vertices:
+            if not v.deleted:
+                new_v_obj = get_or_create_vertex(v.position)
+                old_vert_new_obj_map[v.id] = new_v_obj
+        
+        # Buat vertex di Face Centroid
+        for f in self.mesh.faces:
+            if f.deleted or f.is_boundary: continue
+            verts = f.vertices()
+            if not verts: continue
+            centroid_pos = np.mean([v.position for v in verts], axis=0)
+            centroid_obj = get_or_create_vertex(centroid_pos)
+            face_centroid_obj_map[f.id] = centroid_obj
+            
+        # Buat vertex di Edge Midpoint
+        for e in self.mesh.edges:
+            if e.deleted or not e.halfedge: 
+                continue
+            v1, v2 = e.vertices()
+            if not v1 or not v2:
+                continue
+
+            # urutkan ID agar pasangan konsisten
+            key = tuple(sorted((v1.id, v2.id)))
+
+            if key not in edge_midpoint_obj_map:
+                midpoint_pos = 0.5 * (v1.position + v2.position)
+                midpoint_obj = get_or_create_vertex(midpoint_pos)
+                edge_midpoint_obj_map[key] = midpoint_obj
+        
+        for f in self.mesh.faces:
+            if f.deleted or f.is_boundary or f.id not in face_centroid_obj_map:
+                continue
+            
+            verts_list = f.vertices()
+            edges_list = f.edges()
+            if len(verts_list) < 3: continue
+                
+            num_verts = len(verts_list)
+            face_center_obj = face_centroid_obj_map[f.id]
+
+            for i in range(num_verts):
+                v_curr = verts_list[i]
+                v_next = verts_list[(i + 1) % num_verts]
+                v_prev = verts_list[i - 1]
+
+                v_curr_obj = old_vert_new_obj_map[v_curr.id]
+                face_center_obj = face_centroid_obj_map[f.id]
+
+                key_next = tuple(sorted((v_curr.id, v_next.id)))
+                key_prev = tuple(sorted((v_prev.id, v_curr.id)))
+
+                e_next_mid_obj = edge_midpoint_obj_map[key_next]
+                e_prev_mid_obj = edge_midpoint_obj_map[key_prev]
+
+                new_quad = [v_curr_obj, e_next_mid_obj, face_center_obj, e_prev_mid_obj]
+                new_face_list_of_objects.append(new_quad)
+
+        if not new_face_list_of_objects: return False
+            
+        # Rebuild mesh      
+        self.mesh.vertices.clear()
+        self.mesh.edges.clear()
+        self.mesh.faces.clear()
+        self.mesh.halfedges.clear()
+        self.mesh.boundary_faces.clear()
+
+        # Tetapkan list vertex baru
+        self.mesh.vertices = new_vertices_list
+
+        # Panggil builder
+        loader = MeshLoader()
+        loader._build_halfedge_connectivity(self.mesh, new_face_list_of_objects)
+        return True
 
     def subdivide_loop(self) -> bool:
         """
