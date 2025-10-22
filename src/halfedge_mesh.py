@@ -74,6 +74,7 @@ class Vertex(HalfedgeElement):
         if not self.halfedge:
             return []
             
+        # Mulai dari self.halfedge
         neighbors_list = []
         start_halfedge = self.halfedge
         current_halfedge = self.halfedge
@@ -179,6 +180,7 @@ class Vertex(HalfedgeElement):
         if not self.halfedge:
             return []
             
+        # Mulai dari self.halfedge
         faces_list = []
         start_halfedge = self.halfedge
         current_halfedge = self.halfedge
@@ -255,11 +257,14 @@ class Face(HalfedgeElement):
         if not self.halfedge:
             return []
 
+        # Mulai dari self.halfedge
         vertices_list = []
         start_halfedge = self.halfedge
         current_halfedge = self.halfedge
 
+        # Traversal dengan mengikuti pointer h.next
         while True:
+            # Ambil h.vertex
             if current_halfedge and current_halfedge.vertex:
                 vertices_list.append(current_halfedge.vertex)
             else:
@@ -294,11 +299,14 @@ class Face(HalfedgeElement):
         if not self.halfedge:
             return []
 
+        # Mulai dari self.halfedge
         edges_list = []
         start_halfedge = self.halfedge
         current_halfedge = self.halfedge
 
+        # Traversal dengan mengikuti pointer h.next
         while True:
+            # Ambil h.edge
             if current_halfedge and current_halfedge.edge:
                 edges_list.append(current_halfedge.edge)
             else:
@@ -337,6 +345,7 @@ class Face(HalfedgeElement):
         Catatan:
             - Jika panjang normal hampir nol, gunakan default (0,0,1).
         """
+        # Ambil semua vertex dari face
         verts = self.vertices()
         
         # Jika jumlah vertex < 3, return default normal
@@ -381,6 +390,7 @@ class Face(HalfedgeElement):
         Return:
             float: luas area face.
         """
+        # Ambil semua vertex dari face
         verts = self.vertices()
         
         # Jika jumlah vertex < 3, return 0.0
