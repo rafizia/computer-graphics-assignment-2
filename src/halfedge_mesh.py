@@ -71,8 +71,33 @@ class Vertex(HalfedgeElement):
         Catatan:
             - Jika vertex tidak punya halfedge (isolated), return list kosong.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi neighbors()")
+        if not self.halfedge:
+            return []
+            
+        neighbors_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            # Simpan vertex ke dalam list
+            if current_halfedge and current_halfedge.vertex:
+                neighbors_list.append(current_halfedge.vertex)
+            else:
+                break
+
+            # Pindah ke halfedge.twin.next
+            if not current_halfedge.twin:
+                break 
+            current_halfedge = current_halfedge.twin.next
+
+            # Berhenti jika sudah kembali ke awal
+            if current_halfedge == start_halfedge:
+                break
+            
+            if current_halfedge is None:
+                break
+
+        return neighbors_list
 
 
     def normal(self) -> np.ndarray:
@@ -100,8 +125,33 @@ class Vertex(HalfedgeElement):
             - Traversal bisa dilakukan dengan h = h.twin.next.
             - Berhenti jika kembali ke halfedge awal.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi normal()")
+        # Dapatkan semua face adjacent
+        adjacent_faces = self.faces()
+
+        # Jika vertex tidak punya face valid
+        if not adjacent_faces:
+            return np.array([0.0, 1.0, 0.0])
+
+        # Akumulator
+        weighted_normal_sum = np.array([0.0, 0.0, 0.0])
+
+        # Iterasi setiap face
+        for face in adjacent_faces:         
+            # Hitung normal
+            face_normal = face.normal()
+            # Hitung luas
+            face_area = face.area()
+            # Tambahkan (normal_face * area_face) ke accumulator
+            weighted_normal_sum += face_normal * face_area
+
+        # Normalisasi
+        magnitude = np.linalg.norm(weighted_normal_sum)
+        
+        # Handle jika panjangnya nol
+        if magnitude < 1e-9:
+            return np.array([0.0, 1.0, 0.0])
+            
+        return weighted_normal_sum / magnitude
 
 
     def faces(self) -> List['Face']:
@@ -126,8 +176,33 @@ class Vertex(HalfedgeElement):
             - Jika vertex tidak punya halfedge, return list kosong.
             - Hati-hati jangan masukkan boundary face.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi faces()")
+        if not self.halfedge:
+            return []
+            
+        faces_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            # Ambil face dari halfedge saat ini
+            if current_halfedge and current_halfedge.face:
+                # Skip boundary faces
+                if not current_halfedge.face.is_boundary:
+                    faces_list.append(current_halfedge.face)
+
+            # Pindah ke halfedge.twin.next
+            if not current_halfedge.twin:
+                break 
+            current_halfedge = current_halfedge.twin.next
+
+            # Berhenti jika sudah kembali ke awal
+            if current_halfedge == start_halfedge:
+                break
+            
+            if current_halfedge is None:
+                break
+
+        return faces_list
 
 
 class Edge(HalfedgeElement):
@@ -177,8 +252,27 @@ class Face(HalfedgeElement):
             - Jika face tidak punya halfedge (kosong), return list kosong.
             - Urutan vertex mengikuti urutan traversal halfedge (loop tertutup).
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi vertices()")
+        if not self.halfedge:
+            return []
+
+        vertices_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            if current_halfedge and current_halfedge.vertex:
+                vertices_list.append(current_halfedge.vertex)
+            else:
+                break
+        
+            # Bergerak ke halfedge berikutnya di dalam face
+            current_halfedge = current_halfedge.next
+        
+            # Berhenti jika sudah kembali ke awal 
+            if current_halfedge == start_halfedge:
+                break
+
+        return vertices_list
 
     def edges(self) -> List['Edge']:
         """
@@ -197,8 +291,27 @@ class Face(HalfedgeElement):
             - Jika face tidak punya halfedge (kosong), return list kosong.
             - Urutan edge mengikuti urutan traversal halfedge.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi edges()")
+        if not self.halfedge:
+            return []
+
+        edges_list = []
+        start_halfedge = self.halfedge
+        current_halfedge = self.halfedge
+
+        while True:
+            if current_halfedge and current_halfedge.edge:
+                edges_list.append(current_halfedge.edge)
+            else:
+                break
+            
+            # Bergerak ke halfedge berikutnya di dalam face
+            current_halfedge = current_halfedge.next
+            
+            # Berhenti jika sudah kembali ke awal
+            if current_halfedge == start_halfedge:
+                break
+                
+        return edges_list
 
     def normal(self) -> np.ndarray:
         """
@@ -224,8 +337,33 @@ class Face(HalfedgeElement):
         Catatan:
             - Jika panjang normal hampir nol, gunakan default (0,0,1).
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi normal()")
+        verts = self.vertices()
+        
+        # Jika jumlah vertex < 3, return default normal
+        if len(verts) < 3:
+            return np.array([0.0, 0.0, 1.0])
+
+        # Inisialisasi
+        normal_vec = np.array([0.0, 0.0, 0.0])
+        num_verts = len(verts)
+
+        # Newell's method
+        for i in range(num_verts):
+            v_i = verts[i].position
+            v_i_plus_1 = verts[(i + 1) % num_verts].position
+            
+            normal_vec[0] += (v_i[1] - v_i_plus_1[1]) * (v_i[2] + v_i_plus_1[2])
+            normal_vec[1] += (v_i[2] - v_i_plus_1[2]) * (v_i[0] + v_i_plus_1[0])
+            normal_vec[2] += (v_i[0] - v_i_plus_1[0]) * (v_i[1] + v_i_plus_1[1])
+
+        # Normalisasi 
+        magnitude = np.linalg.norm(normal_vec)
+        
+        # Handle panjang normal hampir nol
+        if magnitude < 1e-9:
+            return np.array([0.0, 0.0, 1.0])
+            
+        return normal_vec / magnitude
 
     def area(self) -> float:
         """
@@ -243,8 +381,36 @@ class Face(HalfedgeElement):
         Return:
             float: luas area face.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi area()")
+        verts = self.vertices()
+        
+        # Jika jumlah vertex < 3, return 0.0
+        if len(verts) < 3:
+            return 0.0
+
+        # Pilih vertex pertama sebagai pusat (v0)
+        v0 = verts[0].position
+        total_area = 0.0
+        num_verts = len(verts)
+
+        # Iterasi untuk membentuk segitiga (v0, v_i, v_{i+1})
+        for i in range(1, num_verts - 1):
+            v_i = verts[i].position
+            v_i_plus_1 = verts[i + 1].position
+            
+            # Buat dua vektor dari pusat v0
+            vec_a = v_i - v0
+            vec_b = v_i_plus_1 - v0
+            
+            # Hitung cross product
+            cross_product = np.cross(vec_a, vec_b)
+            
+            # Luas segitiga
+            triangle_area = 0.5 * np.linalg.norm(cross_product)
+            
+            # Jumlahkan semua luas segitiga
+            total_area += triangle_area
+            
+        return total_area
 
     def is_triangle(self) -> bool:
         """Check apakah face adalah triangle"""
@@ -345,8 +511,69 @@ class HalfedgeMesh:
         Return:
             dict: dictionary dengan semua statistik mesh.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi statistics()")
+        vert_count = 0
+        edge_count = 0
+        face_count = 0
+        halfedge_count = 0
+        tri_count = 0
+        quad_count = 0
+        other_face_count = 0
+        boundary_edge_count = 0
+
+        # Hitung Vertices
+        for v in self.vertices:
+            if not v.deleted:
+                vert_count += 1
+        
+        # Hitung Halfedges
+        for h in self.halfedges:
+            if not h.deleted:
+                halfedge_count += 1
+        
+        # Hitung Edges dan Boundary Edges
+        for e in self.edges:
+            if not e.deleted:
+                edge_count += 1
+                
+                # Cek apakah boundary edge
+                h = e.halfedge
+                if h and h.twin:
+                    is_h1_boundary = not h.face or h.face.is_boundary
+                    is_h2_boundary = not h.twin.face or h.twin.face.is_boundary
+                    
+                    # Edge adalah boundary jika tepat satu dari halfedge-nya adalah boundary.
+                    if is_h1_boundary != is_h2_boundary:
+                        boundary_edge_count += 1
+                elif h:
+                     # Jika tidak punya twin, pasti boundary
+                     boundary_edge_count += 1
+
+        # Hitung Faces dan klasifikasinya
+        for f in self.faces:
+            # Lewati face yang deleted atau merupakan virtual boundary face
+            if not f.deleted and not f.is_boundary:
+                face_count += 1
+                num_verts = len(f.vertices()) 
+                
+                if num_verts == 3:
+                    tri_count += 1
+                elif num_verts == 4:
+                    quad_count += 1
+                elif num_verts > 4:
+                    other_face_count += 1
+
+        stats = {
+            "vertices": vert_count,
+            "edges": edge_count,
+            "faces": face_count,
+            "halfedges": halfedge_count,
+            "triangles": tri_count,
+            "quads": quad_count,
+            "other_faces": other_face_count,
+            "boundary_edges": boundary_edge_count
+        }
+        
+        return stats
 
     def surface_area(self) -> float:
         """
@@ -361,8 +588,18 @@ class HalfedgeMesh:
         Return:
             float: luas permukaan total.
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi surface_area()")
+        total_area = 0.0
+        
+        # Iterasi semua face
+        for f in self.faces:
+            # Abaikan face yang boundary atau deleted
+            if f.deleted or f.is_boundary:
+                continue
+                
+            # Panggil f.area()
+            total_area += f.area()
+            
+        return total_area
 
     def volume(self) -> float:
         """
@@ -382,5 +619,36 @@ class HalfedgeMesh:
         Return:
             float: volume mesh (selalu non-negatif).
         """
-        # TODO: Implement this
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi volume()")
+        total_volume = 0.0
+
+        # Iterasi semua face
+        for f in self.faces:
+            # Abaikan face yang boundary atau deleted
+            if f.deleted or f.is_boundary:
+                continue
+
+            # Ambil vertices
+            verts = f.vertices()
+
+            # Jika face punya < 3 vertex
+            if len(verts) < 3:
+                continue
+            
+            # Ambil vertex[0] sebagai pivot
+            p0 = verts[0].position
+            
+            # Lakukan triangulasi fan
+            for i in range(1, len(verts) - 1):
+                p1 = verts[i].position
+                p2 = verts[i+1].position
+                
+                # Hitung kontribusi volume
+                cross_product = np.cross(p1, p2)
+                dot_product = np.dot(p0, cross_product)
+                tetra_volume = dot_product / 6.0
+                
+                # Jumlahkan semua kontribusi
+                total_volume += tetra_volume
+                
+        # Ambil nilai absolut dari volume
+        return abs(total_volume)

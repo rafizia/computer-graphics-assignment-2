@@ -9,6 +9,7 @@ Implementasi operasi-operasi mesh:
 import numpy as np
 from typing import Optional
 from halfedge_mesh import HalfedgeMesh, Vertex, Edge, Face
+from mesh_loader import MeshLoader
 
 class MeshOperations:
     """Kelas untuk operasi-operasi mesh"""
@@ -48,7 +49,40 @@ class MeshOperations:
         Returns:
             int: jumlah face non-triangle yang sudah ditriangulasi.
         """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi triangulate()")
+        faces_to_delete = [] # Face yg perlu ditriangulasi
+        new_triangles = [] # Triangles baru
+        triangulated_count = 0
+
+        for face in self.mesh.faces:
+            # Lewati face yang sudah triangle, boundary, atau dihapus
+            if face.deleted or face.is_boundary:
+                continue
+            
+            vertices = face.vertices()
+            n = len(vertices)
+            
+            # Jika face punya n > 3 vertex, lakukan fan triangulation
+            if n > 3:
+                v0 = vertices[0] # Pivot
+                
+                # Buat triangle-triangle baru: [v0, v[i], v[i+1]]
+                for i in range(1, n - 1):
+                    triangle = [v0, vertices[i], vertices[i + 1]]
+                    new_triangles.append(triangle)
+
+                faces_to_delete.append(face)
+                triangulated_count += 1
+        
+        # Jika tidak ada face yang perlu ditriangulasi
+        if triangulated_count == 0:
+            return 0
+        
+        for face in faces_to_delete:
+            face.mark_deleted()
+        
+        MeshLoader._build_halfedge_connectivity(self.mesh, new_triangles)
+        
+        return triangulated_count
 
     def subdivide_linear(self) -> bool:
         """
@@ -83,7 +117,88 @@ class MeshOperations:
             bool: True jika subdivision berhasil,
                 False jika tidak ada face valid.
         """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi subdivide_linear()")
+        # Mengumpulkan data posisi dari semua face yang valid
+        old_faces_data = []
+        for face in self.mesh.faces:
+            if face.deleted or face.is_boundary:
+                continue
+            
+            vertices = face.vertices()
+            if len(vertices) < 3:
+                continue
+                
+            face_data = {
+                'vertices': [v.position.copy() for v in vertices]
+            }
+            old_faces_data.append(face_data)
+        
+        # Jika tidak ada face valid
+        if len(old_faces_data) == 0:
+            return False
+        
+        # Siapkan struktur untuk sub-faces baru
+        new_faces = []
+        
+        # Mapping posisi ke vertex (buat menghindari duplikasi)
+        position_to_vertex = {}
+        
+        def get_or_create_vertex(position):
+            """Helper function untuk mendapatkan atau membuat vertex berdasarkan posisi"""
+            pos_tuple = tuple(position)
+            if pos_tuple not in position_to_vertex:
+                position_to_vertex[pos_tuple] = position
+            return position_to_vertex[pos_tuple]
+        
+        # Memproses setiap face lama untuk membuat sub-face baru
+        for face_data in old_faces_data:
+            vertices_pos = face_data['vertices']
+            n = len(vertices_pos)
+            
+            # Menghitung face center (centroid)
+            face_center = np.mean(vertices_pos, axis=0)
+            face_center_vertex = get_or_create_vertex(face_center)
+            
+            # Menghitung edge midpoints
+            edge_midpoints = []
+            for i in range(n):
+                v_curr = vertices_pos[i]
+                v_next = vertices_pos[(i + 1) % n]
+                midpoint = (v_curr + v_next) / 2.0
+                edge_midpoints.append(get_or_create_vertex(midpoint))
+            
+            # Untuk setiap vertex pada face, bentuk sub-face
+            # Pattern: [corner, edge_mid_next, face_center, edge_mid_prev]
+            for i in range(n):
+                corner = get_or_create_vertex(vertices_pos[i])
+                edge_mid_next = edge_midpoints[i]  # edge dari i ke i+1
+                edge_mid_prev = edge_midpoints[(i - 1) % n]  # edge dari i-1 ke i
+                
+                # Buat sub-face baru (quad untuk n-gon, atau triangle jika n=3)
+                sub_face = [corner, edge_mid_next, face_center_vertex, edge_mid_prev]
+                new_faces.append(sub_face)
+        
+        # Kosongkan mesh lama
+        self.mesh.vertices.clear()
+        self.mesh.edges.clear()
+        self.mesh.faces.clear()
+        self.mesh.halfedges.clear()
+        self.mesh.boundary_faces.clear()
+        
+        # Buat vertex baru dari position_to_vertex map
+        vertex_map = {}
+        for pos_tuple, position in position_to_vertex.items():
+            new_vertex = self.mesh.add_vertex(position)
+            vertex_map[pos_tuple] = new_vertex
+        
+        # Convert new_faces dari positions ke vertex objects
+        new_faces_vertices = []
+        for face_positions in new_faces:
+            face_vertices = [vertex_map[tuple(pos)] for pos in face_positions]
+            new_faces_vertices.append(face_vertices)
+
+        MeshLoader._build_halfedge_connectivity(self.mesh, new_faces_vertices)
+        
+        return True
 
     def subdivide_loop(self) -> bool:
         """
@@ -123,7 +238,131 @@ class MeshOperations:
         bool: True jika subdivision berhasil,
               False jika mesh bukan triangular mesh.
     """
-    raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi subdivide_loop()")
+        # Validasi memastikan semua face adalah triangle
+        for face in self.mesh.faces:
+            if face.deleted or face.is_boundary:
+                continue
+            if len(face.vertices()) != 3:
+                return False
+        
+        # Mengumpulkan data face dan vertex lama
+        old_faces_data = []
+        for face in self.mesh.faces:
+            if face.deleted or face.is_boundary:
+                continue
+            vertices = face.vertices()
+            old_faces_data.append({
+                'vertices': [v.position.copy() for v in vertices],
+                'vertex_objs': vertices
+            })
+        
+        if len(old_faces_data) == 0:
+            return False
+        
+        old_vertices_data = []
+        for vertex in self.mesh.vertices:
+            if not vertex.deleted:
+                old_vertices_data.append({
+                    'position': vertex.position.copy(),
+                    'neighbors': [n.position.copy() for n in vertex.neighbors()],
+                    'valence': vertex.degree()
+                })
+        
+        # Membangun edge adjacency: edge -> (vertices, faces, opposite_vertices)
+        edge_map = {}
+        for face_data in old_faces_data:
+            verts = face_data['vertices']
+            for i in range(3):
+                v1, v2 = verts[i], verts[(i + 1) % 3]
+                v_opp = verts[(i + 2) % 3]
+                edge_key = tuple(sorted([tuple(v1), tuple(v2)]))
+                
+                if edge_key not in edge_map:
+                    edge_map[edge_key] = {'vertices': [v1, v2], 'opposites': [], 'faces': 0}
+                edge_map[edge_key]['opposites'].append(v_opp)
+                edge_map[edge_key]['faces'] += 1
+        
+        # Menghitung posisi edge vertices dengan formula Loop
+        edge_vertex_positions = {}
+        for edge_key, edge_data in edge_map.items():
+            v1, v2 = edge_data['vertices']
+            opposites = edge_data['opposites']
+            
+            if edge_data['faces'] == 2:  # Interior edge
+                opp1, opp2 = opposites[0], opposites[1]
+                new_pos = (3/8) * (v1 + v2) + (1/8) * (opp1 + opp2)
+            else:  # Boundary edge
+                new_pos = (v1 + v2) / 2.0
+            
+            edge_vertex_positions[edge_key] = new_pos
+        
+        # Menghitung posisi baru untuk vertex lama dengan formula Loop
+        new_vertex_positions = []
+        for vertex_data in old_vertices_data:
+            pos = vertex_data['position']
+            neighbors = vertex_data['neighbors']
+            n = vertex_data['valence']
+            
+            if n == 0:
+                new_vertex_positions.append(pos)
+                continue
+            
+            # Menghitung beta berdasarkan valence
+            if n == 3:
+                beta = 3.0 / 16.0
+            else:
+                beta = 3.0 / (8.0 * n)
+            
+            # Formula Loop: (1 - n*β)*v + β*Σ(neighbors)
+            neighbor_sum = np.sum(neighbors, axis=0)
+            new_pos = (1.0 - n * beta) * pos + beta * neighbor_sum
+            new_vertex_positions.append(new_pos)
+        
+        # Clear mesh lama
+        self.mesh.vertices.clear()
+        self.mesh.edges.clear()
+        self.mesh.faces.clear()
+        self.mesh.halfedges.clear()
+        self.mesh.boundary_faces.clear()
+        
+        # Buat vertex baru (old vertices dengan posisi baru)
+        old_vertex_map = {}
+        for i, vertex_data in enumerate(old_vertices_data):
+            old_pos = vertex_data['position']
+            new_pos = new_vertex_positions[i]
+            new_vertex = self.mesh.add_vertex(new_pos)
+            old_vertex_map[tuple(old_pos)] = new_vertex
+        
+        # Buat edge vertices
+        edge_vertex_map = {}
+        for edge_key, new_pos in edge_vertex_positions.items():
+            new_vertex = self.mesh.add_vertex(new_pos)
+            edge_vertex_map[edge_key] = new_vertex
+        
+        # Build 4 triangle baru untuk setiap face lama
+        new_faces = []
+        for face_data in old_faces_data:
+            verts = face_data['vertices']
+            
+            # Get corner vertices
+            corners = [old_vertex_map[tuple(v)] for v in verts]
+            
+            # Get edge vertices
+            edge_verts = []
+            for i in range(3):
+                v1, v2 = verts[i], verts[(i + 1) % 3]
+                edge_key = tuple(sorted([tuple(v1), tuple(v2)]))
+                edge_verts.append(edge_vertex_map[edge_key])
+            
+            # Pattern: 3 corner triangles + 1 center triangle
+            new_faces.append([corners[0], edge_verts[0], edge_verts[2]])
+            new_faces.append([corners[1], edge_verts[1], edge_verts[0]])
+            new_faces.append([corners[2], edge_verts[2], edge_verts[1]])
+            new_faces.append([edge_verts[0], edge_verts[1], edge_verts[2]])
+        
+        MeshLoader._build_halfedge_connectivity(self.mesh, new_faces)
+        
+        return True
 
 
     def subdivide_catmull_clark(self) -> bool:
@@ -173,4 +412,180 @@ class MeshOperations:
             bool: True jika subdivision berhasil,
                 False jika mesh kosong.
         """
-        raise NotImplementedError("Mahasiswa harus mengimplementasikan fungsi subdivide_catmull_clark()")
+        # Menumpulkan data face lama dan hitung face points
+        old_faces_data = []
+        face_points = {}
+        
+        for face in self.mesh.faces:
+            if face.deleted or face.is_boundary:
+                continue
+            
+            vertices = face.vertices()
+            if len(vertices) < 3:
+                continue
+            
+            vertices_pos = [v.position.copy() for v in vertices]
+            face_point = np.mean(vertices_pos, axis=0)
+            
+            old_faces_data.append({
+                'vertices': vertices_pos,
+                'face_point': face_point
+            })
+            
+            # Mapping setiap vertex ke face point-nya
+            for v_pos in vertices_pos:
+                v_key = tuple(v_pos)
+                if v_key not in face_points:
+                    face_points[v_key] = []
+                face_points[v_key].append(face_point)
+        
+        if len(old_faces_data) == 0:
+            return False
+        
+        # Membangun edge adjacency dan hitung edge points
+        edge_map = {}
+        edge_midpoints = {}
+        
+        for face_data in old_faces_data:
+            verts = face_data['vertices']
+            face_pt = face_data['face_point']
+            n = len(verts)
+            
+            for i in range(n):
+                v1, v2 = verts[i], verts[(i + 1) % n]
+                edge_key = tuple(sorted([tuple(v1), tuple(v2)]))
+                midpoint = (v1 + v2) / 2.0
+                
+                if edge_key not in edge_map:
+                    edge_map[edge_key] = {
+                        'vertices': [v1, v2],
+                        'face_points': [],
+                        'midpoint': midpoint
+                    }
+                edge_map[edge_key]['face_points'].append(face_pt)
+                edge_midpoints[edge_key] = midpoint
+        
+        # Menghitung edge points dengan formula Catmull-Clark
+        edge_points = {}
+        for edge_key, edge_data in edge_map.items():
+            v1, v2 = edge_data['vertices']
+            face_pts = edge_data['face_points']
+            
+            if len(face_pts) == 2:  # Interior edge
+                f1, f2 = face_pts[0], face_pts[1]
+                edge_pt = (v1 + v2 + f1 + f2) / 4.0
+            else:  # Boundary edge
+                edge_pt = (v1 + v2) / 2.0
+            
+            edge_points[edge_key] = edge_pt
+        
+        # Mengumpulkan data vertex lama dan deteksi boundary
+        old_vertices_data = []
+        vertex_edges = {}
+        
+        for vertex in self.mesh.vertices:
+            if vertex.deleted:
+                continue
+            
+            v_pos = vertex.position.copy()
+            v_key = tuple(v_pos)
+            neighbors = [n.position.copy() for n in vertex.neighbors()]
+            
+            # Mengumpulkan edge midpoints adjacent
+            adj_edge_midpoints = []
+            for n_pos in neighbors:
+                edge_key = tuple(sorted([v_key, tuple(n_pos)]))
+                if edge_key in edge_midpoints:
+                    adj_edge_midpoints.append(edge_midpoints[edge_key])
+            
+            # Deteksi boundary vertex (valence ≠ len(face_points))
+            adj_face_points = face_points.get(v_key, [])
+            is_boundary = len(neighbors) != len(adj_face_points)
+            
+            old_vertices_data.append({
+                'position': v_pos,
+                'neighbors': neighbors,
+                'face_points': adj_face_points,
+                'edge_midpoints': adj_edge_midpoints,
+                'is_boundary': is_boundary,
+                'valence': len(neighbors)
+            })
+        
+        # Hitung posisi baru untuk vertex lama dengan formula Catmull-Clark
+        new_vertex_positions = []
+        for v_data in old_vertices_data:
+            pos = v_data['position']
+            
+            if v_data['is_boundary']:
+                # Boundary vertex: V' = 3/4*S + 1/8*(V_prev + V_next)
+                neighbors = v_data['neighbors']
+                if len(neighbors) >= 2:
+                    new_pos = (3.0/4.0) * pos + (1.0/8.0) * (neighbors[0] + neighbors[-1])
+                else:
+                    new_pos = pos
+            else:
+                # Interior vertex: V' = (Q + 2R + (n-3)S) / n
+                n = v_data['valence']
+                if n == 0:
+                    new_pos = pos
+                else:
+                    Q = np.mean(v_data['face_points'], axis=0) if len(v_data['face_points']) > 0 else pos
+                    R = np.mean(v_data['edge_midpoints'], axis=0) if len(v_data['edge_midpoints']) > 0 else pos
+                    S = pos
+                    new_pos = (Q + 2.0*R + (n - 3.0)*S) / n
+            
+            new_vertex_positions.append(new_pos)
+        
+        # Clear mesh lama
+        self.mesh.vertices.clear()
+        self.mesh.edges.clear()
+        self.mesh.faces.clear()
+        self.mesh.halfedges.clear()
+        self.mesh.boundary_faces.clear()
+        
+        # Rebuild vertices dengan posisi baru
+        old_vertex_map = {}
+        for i, v_data in enumerate(old_vertices_data):
+            old_pos = v_data['position']
+            new_pos = new_vertex_positions[i]
+            new_vertex = self.mesh.add_vertex(new_pos)
+            old_vertex_map[tuple(old_pos)] = new_vertex
+        
+        # Buat edge vertices
+        edge_vertex_map = {}
+        for edge_key, edge_pt in edge_points.items():
+            new_vertex = self.mesh.add_vertex(edge_pt)
+            edge_vertex_map[edge_key] = new_vertex
+        
+        # Buat face point vertices
+        face_point_map = {}
+        for i, face_data in enumerate(old_faces_data):
+            face_pt = face_data['face_point']
+            new_vertex = self.mesh.add_vertex(face_pt)
+            face_point_map[i] = new_vertex
+        
+        # Bangun n quads per n-gon: [curr_vertex, edge_next, face_center, edge_prev]
+        new_faces = []
+        for face_idx, face_data in enumerate(old_faces_data):
+            verts = face_data['vertices']
+            n = len(verts)
+            face_center = face_point_map[face_idx]
+            
+            for i in range(n):
+                curr = old_vertex_map[tuple(verts[i])]
+                next_idx = (i + 1) % n
+                
+                edge_next_key = tuple(sorted([tuple(verts[i]), tuple(verts[next_idx])]))
+                edge_next = edge_vertex_map[edge_next_key]
+                
+                prev_idx = (i - 1) % n
+                edge_prev_key = tuple(sorted([tuple(verts[prev_idx]), tuple(verts[i])]))
+                edge_prev = edge_vertex_map[edge_prev_key]
+                
+                # Quad: [curr, edge_next, face_center, edge_prev]
+                new_faces.append([curr, edge_next, face_center, edge_prev])
+        
+        MeshLoader._build_halfedge_connectivity(self.mesh, new_faces)
+        
+        return True
+
